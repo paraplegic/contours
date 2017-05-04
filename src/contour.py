@@ -60,22 +60,22 @@ def boundingBoxes( image, clist ):
       writeText( image, (x,y), txt, (244,244,244) )
 
 def webCam( num ):
+
   stream = cv2.VideoCapture( num )
-  stream.set( CV_CAP_PROP_FRAME_HEIGHT, height )
-  stream.set( CV_CAP_PROP_FRAME_WIDTH, width )
+  if stream.isOpened() == False:
+    print "Cannot open input video stream!"
+    exit()
+
   ht = stream.get( CV_CAP_PROP_FRAME_HEIGHT )
   wd = stream.get( CV_CAP_PROP_FRAME_WIDTH )
-  print "camera image size ", wd, "x", ht
-
-  if stream.isOpened() == False:
-    print "Cannot open input video!"
-    exit()
+  print "camera opened: image size ", wd, "x", ht
   return stream
 
 def getFrame( stream ):
   rv, frame = stream.read()
   if rv:
     return frame
+
   return None
 
 def show( image ):
@@ -97,7 +97,9 @@ def main():
 
   ## cv2.namedWindow( 'Display', cv2.WINDOW_NORMAL )
   while True:
-    frame = getFrame( cam )
+    frame = None
+    while frame is None:
+      frame = getFrame( cam )
     contours = getContours( frame )
     ## showContours( frame, contours )
     boundingBoxes( frame, contours )
