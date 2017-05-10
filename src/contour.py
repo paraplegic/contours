@@ -10,7 +10,7 @@ width = 640
 CV_CAP_PROP_FRAME_WIDTH = 3
 CV_CAP_PROP_FRAME_HEIGHT = 4
 
-jitter = 120
+jitter = 400
 if stopMotion:
   jitter = 10000
 
@@ -54,7 +54,7 @@ def boundingBoxes( image, clist ):
     y += -h/2
     area = w * h
     ## x,y,w,h = cv2.boundingRect(c)
-    if w > 20 and w < 200:
+    if w > 10 and w < 220:
       cv2.rectangle( image, (x,y), (x+w,y+h), (244,244,244), 2 )
       txt = "(%d x %d)" % (w, h)
       writeText( image, (x,y), txt, (244,244,244) )
@@ -109,5 +109,6 @@ def main():
 
   save( frame, 'save.jpg' )
   cv2.destroyAllWindows()
+
 if __name__ == "__main__":
   main()
