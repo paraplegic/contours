@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
+import time as time
 import numpy as np
 import cv2
 
+display = True
 stopMotion = False
 height = 480
 width = 640
@@ -22,13 +24,15 @@ def getContours( image ):
   return rv
 
 def showContours( image, lst ):
+  if not display:
+    return
   return cv2.drawContours( image, lst, -1, (0,255,0), 2 )
 
 def writeText( image, at, txt, colour ):
   if colour == None:
-    colour = (0,0,255)
+    colour = (0,0,0)
   font = cv2.FONT_HERSHEY_SIMPLEX
-  cv2.putText( image, txt, at, font, 0.6, colour, 2 )
+  cv2.putText( image, txt, at, font, 0.4, colour, 2 )
 
 def boundingCircles( image, clist ):
   ix = 0
@@ -36,13 +40,14 @@ def boundingCircles( image, clist ):
     (x,y),rad = cv2.minEnclosingCircle( c )
     centre = (int(x),int(y))
     radius = int( rad )
-    if radius > 20 and radius < 150:
+    if radius > 20 and radius < 200:
       cv2.circle( image, centre, radius, (0,255,0), 2 )
       txt = "R=%s" % radius
       writeText( image, centre, txt, (0,255,0) )
     ix += 1
 
 def boundingBoxes( image, clist ):
+  rv = []
   for c in clist:
     T = cv2.minAreaRect( c )
     x = int( round( T[0][0] ) )
@@ -54,10 +59,12 @@ def boundingBoxes( image, clist ):
     y += -h/2
     area = w * h
     ## x,y,w,h = cv2.boundingRect(c)
-    if w > 10 and w < 220:
-      cv2.rectangle( image, (x,y), (x+w,y+h), (244,244,244), 2 )
+    if display and w > 10 and w < 90:
+      cv2.rectangle( image, (x,y), (x+w,y+h), (223,223,223), 2 )
       txt = "(%d x %d)" % (w, h)
-      writeText( image, (x,y), txt, (244,244,244) )
+      writeText( image, (x,y), txt, (0,0,0) )
+      rv.append( (w,h) )
+    return rv
 
 def webCam( num ):
 
@@ -80,6 +87,9 @@ def getFrame( stream ):
 
 def show( image ):
 
+  if not display:
+    return False
+
   cv2.imshow( 'Display',image )
   if cv2.waitKey(jitter) & 0xff == 'q':
     return True
@@ -97,13 +107,23 @@ def main():
 
   ## cv2.namedWindow( 'Display', cv2.WINDOW_NORMAL )
   while True:
+    if display:
+      time.sleep(0.05)
+    else:
+      time.sleep(1.0)
     frame = None
+    start = time.time()
     while frame is None:
       frame = getFrame( cam )
     contours = getContours( frame )
     ## showContours( frame, contours )
-    boundingBoxes( frame, contours )
-    boundingCircles( frame, contours )
+    bb = boundingBoxes( frame, contours )
+    bbx = time.time()
+    box = None
+    if len( bb ) > 0:
+      box = bb[0]
+    print "bbx calc: %s %s" % ( str( bbx - start ), box )
+    ## boundingCircles( frame, contours )
     if show( frame ):
       break
 
