@@ -4,28 +4,43 @@ import time as time
 import numpy as np
 import cv2
 
+from pkg_resources import parse_version
+
 display = True
 stopMotion = False
-height = 480
 width = 640
+height = 480
+ntries = 10
 
-CV_CAP_PROP_FRAME_WIDTH = 3
-CV_CAP_PROP_FRAME_HEIGHT = 4
+OPCV3 = parse_version(cv2.__version__) >= parse_version('3')
 
-jitter = 400
+jitter = 8
 if stopMotion:
   jitter = 10000
 
-def getContours( image ):
-  blur = cv2.pyrMeanShiftFiltering( image, 21, 31 )
+# returns OpenCV VideoCapture property id given, e.g., "FPS"
+def vidProperty(prop):
+  return getattr(cv2 if OPCV3 else cv2.cv, ("" if OPCV3 else "CV_") + "CAP_PROP_" + prop)
+
+def XXXgetContours( image ):
+  ## blur = cv2.pyrMeanShiftFiltering( image, 21, 36 )
+  blur = cv2.GaussianBlur(image, (5, 5), 0)
   gray = cv2.cvtColor( blur, cv2.COLOR_BGR2GRAY )
   ret, threshold = cv2.threshold( gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU )
   rv,z = cv2.findContours( threshold, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE )
   return rv
 
+def getContours( image ):
+  # threshold image
+  ret, threshed_img = cv2.threshold(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), 127, 255, cv2.THRESH_BINARY)
+  # find contours and get the external one
+  contours, hier = cv2.findContours(threshed_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+  return contours
+
+
 def showContours( image, lst ):
   if not display:
-    return
+    return None
   return cv2.drawContours( image, lst, -1, (0,255,0), 2 )
 
 def writeText( image, at, txt, colour ):
@@ -49,22 +64,14 @@ def boundingCircles( image, clist ):
 def boundingBoxes( image, clist ):
   rv = []
   for c in clist:
-    T = cv2.minAreaRect( c )
-    x = int( round( T[0][0] ) )
-    y = int( round( T[0][1] ) ) 
-    w = int( round( T[1][0] ) ) 
-    h = int( round( T[1][1] ) ) 
-    t = int( round( T[2] ) ) 
-    x += -w/2
-    y += -h/2
-    area = w * h
-    ## x,y,w,h = cv2.boundingRect(c)
-    if display and w > 10 and w < 90:
-      cv2.rectangle( image, (x,y), (x+w,y+h), (223,223,223), 2 )
-      txt = "(%d x %d)" % (w, h)
-      writeText( image, (x,y), txt, (0,0,0) )
-      rv.append( (w,h) )
-    return rv
+    x,y,w,h = cv2.boundingRect(c)
+    if h > ((2*height)/3) or w > (width/4):
+      continue
+
+    if w > 40 and h > 80:
+      rv.append( (x,y,w,h) )
+
+  return rv
 
 def webCam( num ):
 
@@ -73,9 +80,18 @@ def webCam( num ):
     print "Cannot open input video stream!"
     exit()
 
-  ht = stream.get( CV_CAP_PROP_FRAME_HEIGHT )
-  wd = stream.get( CV_CAP_PROP_FRAME_WIDTH )
+  ht = stream.get( vidProperty( 'FRAME_HEIGHT' ) )
+  wd = stream.get( vidProperty( 'FRAME_WIDTH' ) )
+  sat = stream.get( vidProperty( 'SATURATION' ) )
+  con = stream.get( vidProperty( 'CONTRAST' ) )
+  fps = stream.get( vidProperty( 'FPS' ) )
   print "camera opened: image size ", wd, "x", ht
+  print "sat: %s con: %s fps: %s" % ( sat, con, fps ) 
+  ## stream.set( vidProperty( 'FRAME_HEIGHT' ), int( ht/2 ) )
+  ## stream.set( vidProperty( 'FRAME_WIDTH' ), int( wd/2 ) )
+  stream.set( vidProperty( 'FPS' ), 27 )
+  stream.set( vidProperty( 'SATURATION' ), sat/2 )
+  stream.set( vidProperty( 'CONTRAST' ), con*2 )
   return stream
 
 def getFrame( stream ):
@@ -86,46 +102,91 @@ def getFrame( stream ):
   return None
 
 def show( image ):
-
   if not display:
     return False
 
   cv2.imshow( 'Display',image )
   if cv2.waitKey(jitter) & 0xff == 'q':
     return True
+
   return False
 
 def save( image, file ):
   cv2.imwrite( file, image )
 
+def obatts( bx ):
+	x = bx[0]
+	y = bx[1]
+	w = bx[2]
+	h = bx[3]
+	return ( x, y, w, h )
+
+def getObjects( cam ):
+	frame = None
+	while frame is None:
+		frame = getFrame( cam )
+
+	contours = None
+	while contours is None:
+		contours = getContours( frame )
+
+	bbxs = boundingBoxes( frame, contours )
+
+	rv = []
+	for bx in bbxs:
+		x,y,w,h = obatts( bx )
+		txt = "(%d x %d)" % (w,h)
+		cv2.rectangle( frame, (x,y), (x+w,y+h), (223,223,223), 2 )
+		writeText( frame, (int(x+(w/4)),int(y+(h/2))), txt, (0,222,0) )
+		rv.append( (w,h) )
+
+	if show( frame ):
+		exit( 0 )
+
+	return rv
+
+def getSize( cam, n ):
+	x = 0
+	y = 0
+	ix = n 
+	rv = []
+	while ix > 0:
+		frame = None
+		while frame is None:
+			frame = getFrame( cam )
+
+		contours = None
+		while contours is None:
+			contours = getContours( frame )
+
+		bb = boundingBoxes( frame, contours )
+		if len( bb ) > 0:
+			x += bb[0][0]
+			y += bb[0][1]
+			ix -= 1
+			if show( frame ):
+				exit( 0 )
+			rv.append( ( int(x/n), int(y/n) ) )
+
+	return rv
 
 def main():
   
-  cam = webCam( 0 )
+  cam = webCam( 2 )
+  start = time.time()
   for ix in range( 30 ):
     frame = getFrame( cam )
+  end = time.time()
+  print "30 frames in %s seconds." % str( end - start )
 
-  ## cv2.namedWindow( 'Display', cv2.WINDOW_NORMAL )
   while True:
-    if display:
-      time.sleep(0.05)
-    else:
-      time.sleep(1.0)
-    frame = None
     start = time.time()
-    while frame is None:
-      frame = getFrame( cam )
-    contours = getContours( frame )
-    ## showContours( frame, contours )
-    bb = boundingBoxes( frame, contours )
+    ## box = getSize( cam, ntries )
+    ob = getObjects( cam )
     bbx = time.time()
-    box = None
-    if len( bb ) > 0:
-      box = bb[0]
-    print "bbx calc: %s %s" % ( str( bbx - start ), box )
+    print "%d objects found %s %s." % ( len( ob ), ob, str( bbx - start ) )
+    ## print "bbx calc: %s %s" % ( str( bbx - start ), box )
     ## boundingCircles( frame, contours )
-    if show( frame ):
-      break
 
   save( frame, 'save.jpg' )
   cv2.destroyAllWindows()
