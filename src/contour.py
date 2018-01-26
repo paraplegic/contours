@@ -9,7 +9,7 @@ from pkg_resources import parse_version
 display = True
 width = 640
 height = 480
-ntries = 20
+ntries = 10
 jitter = 1
 
 OPCV3 = parse_version(cv2.__version__) >= parse_version('3')
@@ -202,7 +202,7 @@ def getSize( cam, n ):
 
 def main():
   
-  cam = webCam( 2 )
+  cam = webCam( 0 )
   start = time.time()
   for ix in range( 30 ):
     frame = getFrame( cam )
